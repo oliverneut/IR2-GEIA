@@ -15,25 +15,40 @@ from nltk.tokenize import word_tokenize
 import string
 import re
 
+import nltk
+nltk.download('punkt_tab')
+
+from transformers import AutoModelForCausalLM
+
 logger = logging.getLogger('mylogger')
 logger.setLevel(logging.DEBUG)
-f_handler = logging.FileHandler('models_arr_feb/decoder_beam.log')
+# f_handler = logging.FileHandler('models_arr_feb/decoder_beam.log')
+f_handler = logging.FileHandler('/home/scur2874/IR2-GEIA/models/temp.log')
 f_handler.setLevel(logging.INFO)
 f_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s -  %(message)s"))
 logger.addHandler(f_handler)
 
-def vectorize(sent_list,tokenizer):
+def vectorize(sent_list, tokenizer):
     turn_ending = tokenizer.encode(tokenizer.eos_token)
     token_num = len(tokenizer)
+    
     dial_tokens = [tokenizer.encode(item) + turn_ending for item in sent_list]
-    dial_tokens_np = np.array(dial_tokens)
+    
+    max_len = max(len(tokens) for tokens in dial_tokens) 
+    dial_tokens_padded = [tokens + [0] * (max_len - len(tokens)) for tokens in dial_tokens] 
+    
+    dial_tokens_np = np.array(dial_tokens_padded)
+    
     input_labels = []
+    
     for i in dial_tokens_np:
         temp_i = np.zeros(token_num)
-        temp_i[i] = 1
+        for token in i:  
+            if token < token_num: 
+                temp_i[token] = 1
         input_labels.append(temp_i)
+    
     input_labels = np.array(input_labels)
-
 
     return input_labels
 
@@ -157,13 +172,14 @@ def remove_eos(sent_list):
     for i,s in enumerate(sent_list):
         sent_list[i] = s.replace('<|endoftext|>','')
 
-def metric_token(log_path):
+def metric_token(log_path, model_name):
     with open(log_path, 'r') as f:
         sent_dict = json.load(f)
     y_true = sent_dict['gt']     # list of sentences
     y_pred = sent_dict['pred']   # list of sentences   
     
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
+    # tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     y_true_token = vectorize(y_true,tokenizer)
     y_pred_token = vectorize(y_pred,tokenizer)
 
@@ -213,6 +229,10 @@ if __name__ == '__main__':
     wmt_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_wmt16_simcse_bert_beam.log'
 
     path_list = [abcd_path,mnli_path,woz_path,sst2_path,wmt_path]
+
+    # path_list = ["models/attacker_gpt2_large_personachat_sent_t5_base_beam.log", "models/attacker_gpt2_medium_personachat_sent_t5_base_beam.log"]
+    path_list = ["models/attacker_gpt2_large_personachat_sent_t5_base_beam.log"]
+    # path_list = ["models/attacker_gpt2_medium_personachat_sent_t5_base_beam.log"]
     for p in path_list:
         logger.info(f'====={p}=====')
-        metric_token(p)
+        metric_token(p, "gpt2-large")
