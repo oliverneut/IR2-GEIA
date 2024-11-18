@@ -155,7 +155,7 @@ def process_data_test(data,batch_size,device,config,need_proj=True, model_name="
     print('load data done')
     if need_proj:
         proj_path = 'models/' + 'projection_' + model_name + '_' + config['dataset'] + '_' + config['embed_model']
-        projection = linear_projection(in_num=768, out_num=projection_output)
+        projection = linear_projection(in_num=model.get_sentence_embedding_dimension(), out_num=projection_output)
         projection.load_state_dict(torch.load(proj_path))
         projection.to(device)
         print('load projection done')
