@@ -69,7 +69,7 @@ def process_data(data, batch_size, device, config, need_porj=True, model_name="g
     
     ### Extra projection
     if need_porj:
-        projection = linear_projection(in_num=768, out_num=projection_output).to(device)
+        projection = linear_projection(in_num=model.get_sentence_embedding_dimension(), out_num=projection_output).to(device)
     
     ### For attackers
     model_attacker = AutoModelForCausalLM.from_pretrained(config['model_dir'])
