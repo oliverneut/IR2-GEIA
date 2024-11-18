@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import torch
 import torch.nn as nn
@@ -55,81 +55,96 @@ class personachat(Dataset):
     def collate(self, unpacked_data):
         return unpacked_data
 
-def process_data(data,batch_size,device,config,need_porj=True):
-    #model = SentenceTransformer('all-roberta-large-v1',device=device)   # dim 1024
+def process_data(data, batch_size, device, config, need_porj=True, model_name="gpt2_large", projection_output=1280): 
+    # model = SentenceTransformer('all-roberta-large-v1', device=device)   # dim 1024
     device_1 = torch.device("cuda:0")
-    model = SentenceTransformer(config['embed_model_path'],device=device_1)   # dim 768
+    model = SentenceTransformer(config['embed_model_path'], device=device_1)   # dim 768
     dataset = personachat(data)
     dataloader = DataLoader(dataset=dataset, 
-                              shuffle=True, 
-                              batch_size=batch_size, 
-                              collate_fn=dataset.collate)
+                            shuffle=True, 
+                            batch_size=batch_size, 
+                            collate_fn=dataset.collate)
 
     print('load data done')
-    ### extra projection
+    
+    ### Extra projection
     if need_porj:
-        projection = linear_projection(in_num=768, out_num=1280).to(device)
-    ### for attackers
+        projection = linear_projection(in_num=768, out_num=projection_output).to(device)
+    
+    ### For attackers
     model_attacker = AutoModelForCausalLM.from_pretrained(config['model_dir'])
     tokenizer_attacker = AutoTokenizer.from_pretrained(config['model_dir'])
     criterion = SequenceCrossEntropyLoss()
     model_attacker.to(device)
+    
     param_optimizer = list(model_attacker.named_parameters())
     no_decay = ['bias', 'ln', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-    {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-    {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
+    
     num_gradients_accumulation = 1
     num_epochs = config['num_epochs']
     batch_size = config['batch_size']
-    num_train_optimization_steps  = len(dataloader) * num_epochs // num_gradients_accumulation
+    num_train_optimization_steps = len(dataloader) * num_epochs // num_gradients_accumulation
+    
     optimizer = AdamW(optimizer_grouped_parameters, 
-                  lr=3e-5,
-                  eps=1e-06)
+                      lr=3e-5, 
+                      eps=1e-06)
     if need_porj:
         optimizer.add_param_group({'params': projection.parameters()})
-    scheduler = get_linear_schedule_with_warmup(optimizer, 
-                                            num_warmup_steps=100, 
-                                            num_training_steps = num_train_optimization_steps)
     
-    ### process to obtain the embeddings
+    scheduler = get_linear_schedule_with_warmup(optimizer, 
+                                                num_warmup_steps=100, 
+                                                num_training_steps=num_train_optimization_steps)
+    
+    ### Process to obtain the embeddings
     for i in range(num_epochs):
         model.eval()
-        for idx,batch_text in enumerate(dataloader):
-            with torch.no_grad():           
-                embeddings = model.encode(batch_text,convert_to_tensor = True).to(device)
+        for idx, batch_text in enumerate(dataloader):
+            with torch.no_grad():
+                embeddings = model.encode(batch_text, convert_to_tensor=True).to(device)
                 print(f'Embedding dim: {embeddings.size()}')
 
-            ### attacker part, needs training
+            ### Attacker part, needs training
             if need_porj:
-               embeddings = projection(embeddings)
+                embeddings = projection(embeddings)
+            
 
-            record_loss, perplexity = train_on_batch(batch_X=embeddings,batch_D=batch_text,model=model_attacker,tokenizer=tokenizer_attacker,criterion=criterion,device=device,train=True)
+            record_loss, perplexity = train_on_batch(
+                batch_X=embeddings, 
+                batch_D=batch_text, 
+                model=model_attacker, 
+                tokenizer=tokenizer_attacker, 
+                criterion=criterion, 
+                device=device, 
+                train=True
+            )
             optimizer.step()
             scheduler.step()
-            # make sure no grad for GPT optimizer
             optimizer.zero_grad()
             print(f'Training: epoch {i} batch {idx} with loss: {record_loss} and PPL {perplexity} with size {embeddings.size()}')
-            #sys.exit(-1)
+
         if need_porj:
-            proj_path = 'models/' + 'projection_gpt2_large_' + config['dataset'] + '_' + config['embed_model']
+            proj_path = f'models/projection_{model_name}_{config["dataset"]}_{config["embed_model"]}'
             torch.save(projection.state_dict(), proj_path)
-        save_path = 'models/' + 'attacker_gpt2_large_' + config['dataset'] + '_' + config['embed_model']
+        
+        save_path = f'models/attacker_{model_name}_{config["dataset"]}_{config["embed_model"]}'
         model_attacker.save_pretrained(save_path)
 
 
+
 ### used for testing only
-def process_data_test(data,batch_size,device,config,need_proj=True):
+def process_data_test(data,batch_size,device,config,need_proj=True, model_name="gpt2_large", projection_output=1280):
     #model = SentenceTransformer('all-roberta-large-v1',device=device)   # dim 1024
     #model = SentenceTransformer(config['embed_model_path'],device=device)   #  dim 768
     device_1 = torch.device("cuda:0")
     model = SentenceTransformer(config['embed_model_path'],device=device_1)   # dim 768
     if(config['decode'] == 'beam'):
-        save_path = 'models/' + 'attacker_gpt2_large_' + config['dataset'] + '_' + config['embed_model']+'_beam'+'.log'
+        save_path = 'models/' + 'attacker_' + model_name + '_' + config['dataset'] + '_' + config['embed_model']+'_beam'+'.log'
     else:
-        save_path = 'models/' + 'attacker_gpt2_large_' + config['dataset'] + '_' + config['embed_model']+'.log'
+        save_path = 'models/' + 'attacker_' + model_name + '_' + config['dataset'] + '_' + config['embed_model']+'.log'
     dataset = personachat(data)
     # no shuffle for testing data
     dataloader = DataLoader(dataset=dataset, 
@@ -139,15 +154,15 @@ def process_data_test(data,batch_size,device,config,need_proj=True):
 
     print('load data done')
     if need_proj:
-        proj_path = 'models/' + 'projection_gpt2_large_' + config['dataset'] + '_' + config['embed_model']
-        projection = linear_projection(in_num=768, out_num=1280)
+        proj_path = 'models/' + 'projection_' + model_name + '_' + config['dataset'] + '_' + config['embed_model']
+        projection = linear_projection(in_num=768, out_num=projection_output)
         projection.load_state_dict(torch.load(proj_path))
         projection.to(device)
         print('load projection done')
     else:
         print('no projection loaded')
     # setup on config for sentence generation   AutoModelForCausalLM
-    attacker_path = 'models/' + 'attacker_gpt2_large_' + config['dataset'] + '_' + config['embed_model']
+    attacker_path = 'models/' + 'attacker_' + model_name + '_' + config['dataset'] + '_' + config['embed_model']
     config['model'] = AutoModelForCausalLM.from_pretrained(attacker_path).to(device)
     config['tokenizer'] = AutoTokenizer.from_pretrained('microsoft/DialoGPT-large')
 
@@ -262,6 +277,7 @@ def train_on_batch(batch_X,batch_D,model,tokenizer,criterion,device,train=True):
 
 
 if __name__ == '__main__':
+    print("We are now in the main!")
     model_cards ={}
     model_cards['sent_t5_large'] = 'sentence-t5-large'
     model_cards['sent_t5_base'] = 'sentence-t5-base'
@@ -276,40 +292,42 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=10, help='Training epoches.')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch_size #.')
     parser.add_argument('--dataset', type=str, default='personachat', help='Name of dataset: personachat or qnli')
-    #parser.add_argument('--dataset', type=str, default='qnli', help='Name of dataset: personachat or qnli')
-    #parser.add_argument('--data_type', type=str, default='train', help='train/test')
     parser.add_argument('--data_type', type=str, default='test', help='train/test')
     parser.add_argument('--embed_model', type=str, default='sent_t5_base', help='Name of embedding model: mpnet/sent_roberta/simcse_bert/simcse_roberta/sent_t5')
     parser.add_argument('--decode', type=str, default='beam', help='Name of decoding methods: beam/sampling')
-    #parser.add_argument('--embed_model', type=str, default='simcse_roberta', help='Name of embedding model: mpnet/sent_roberta/simcse_bert/simcse_roberta/sent_t5')
+    parser.add_argument('--model_name', type=str, default='gpt2_large', help='Name of the model in the folder that is saved')
+    parser.add_argument('--projection_output', type=int, default=1280, help='Number of input neurons of the attacker model')
+
     args = parser.parse_args()
+ 
     config = {}
+
     config['model_dir'] = args.model_dir
     config['num_epochs'] = args.num_epochs
     config['batch_size'] = args.batch_size
-    config['dataset'] = args.dataset
+    config['dataset'] = args.dataset 
     config['data_type'] = args.data_type
     config['embed_model'] = args.embed_model
     config['decode'] = args.decode
     config['embed_model_path'] = model_cards[config['embed_model']]
-    config['device'] = torch.device("cuda")
-    config['tokenizer'] = AutoTokenizer.from_pretrained('microsoft/DialoGPT-large')
+    config['device'] = torch.device("cuda")   
+    config['tokenizer'] = AutoTokenizer.from_pretrained('microsoft/DialoGPT-large')   
     config['eos_token'] = config['tokenizer'].eos_token
     config['use_opt'] = False
 
-    
+
+
     device = torch.device("cuda:0")
     #device = torch.device("cpu")
     batch_size = config['batch_size']
 
     sent_list = get_sent_list(config)
-    
     ##### for training
     if(config['data_type'] == 'train'):
-        process_data(sent_list,batch_size,device,config)
+        process_data(sent_list,batch_size,device,config, model_name=args.model_name, projection_output=args.projection_output)
     elif(config['data_type'] == 'test'):
         if('simcse' in config['embed_model']):
-            process_data_test_simcse(sent_list,batch_size,device,config,proj_dir=None,need_proj=False)
+            process_data_test_simcse(sent_list,batch_size,device,config,proj_dir=None,need_proj=False, model_name=args.model_name)
         else:
-            process_data_test(sent_list,batch_size,device,config,need_proj=True)
+            process_data_test(sent_list,batch_size,device,config,need_proj=True, model_name=args.model_name, projection_output=args.projection_output)
 
