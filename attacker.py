@@ -34,7 +34,6 @@ class linear_projection(nn.Module):
         assert(x.size()[1] == out_shape)
         out = self.fc1(x)
 
-
         return out
 
 
@@ -55,8 +54,7 @@ class personachat(Dataset):
     def collate(self, unpacked_data):
         return unpacked_data
 
-def process_data(data, batch_size, device, config, need_porj=True, model_name="gpt2_large", projection_output=1280): 
-    # model = SentenceTransformer('all-roberta-large-v1', device=device)   # dim 1024
+def process_data(data, batch_size, device, config, need_proj, model_name, projection_output): 
     device_1 = torch.device("cuda:0")
     model = SentenceTransformer(config['embed_model_path'], device=device_1)   # dim 768
     dataset = personachat(data)
@@ -68,8 +66,10 @@ def process_data(data, batch_size, device, config, need_porj=True, model_name="g
     print('load data done')
     
     ### Extra projection
-    if need_porj:
-        projection = linear_projection(in_num=model.get_sentence_embedding_dimension(), out_num=projection_output).to(device)
+    if need_proj:
+        input_dimension = model.get_sentence_embedding_dimension()
+
+        projection = linear_projection(in_num=input_dimension, out_num=projection_output).to(device)
     
     ### For attackers
     model_attacker = AutoModelForCausalLM.from_pretrained(config['model_dir'])
@@ -92,7 +92,7 @@ def process_data(data, batch_size, device, config, need_porj=True, model_name="g
     optimizer = AdamW(optimizer_grouped_parameters, 
                       lr=3e-5, 
                       eps=1e-06)
-    if need_porj:
+    if need_proj:
         optimizer.add_param_group({'params': projection.parameters()})
     
     scheduler = get_linear_schedule_with_warmup(optimizer, 
@@ -108,10 +108,9 @@ def process_data(data, batch_size, device, config, need_porj=True, model_name="g
                 print(f'Embedding dim: {embeddings.size()}')
 
             ### Attacker part, needs training
-            if need_porj:
+            if need_proj:
                 embeddings = projection(embeddings)
             
-
             record_loss, perplexity = train_on_batch(
                 batch_X=embeddings, 
                 batch_D=batch_text, 
@@ -126,7 +125,7 @@ def process_data(data, batch_size, device, config, need_porj=True, model_name="g
             optimizer.zero_grad()
             print(f'Training: epoch {i} batch {idx} with loss: {record_loss} and PPL {perplexity} with size {embeddings.size()}')
 
-        if need_porj:
+        if need_proj:
             proj_path = f'models/projection_{model_name}_{config["dataset"]}_{config["embed_model"]}'
             torch.save(projection.state_dict(), proj_path)
         
@@ -318,11 +317,11 @@ if __name__ == '__main__':
 
 
     device = torch.device("cuda:0")
-    #device = torch.device("cpu")
     batch_size = config['batch_size']
 
     sent_list = get_sent_list(config)
-    ##### for training
+
+    # TRAIN
     if(config['data_type'] == 'train'):
         process_data(sent_list,batch_size,device,config, model_name=args.model_name, projection_output=args.projection_output)
     elif(config['data_type'] == 'test'):
@@ -330,4 +329,3 @@ if __name__ == '__main__':
             process_data_test_simcse(sent_list,batch_size,device,config,proj_dir=None,need_proj=False, model_name=args.model_name, projection_output=args.projection_output)
         else:
             process_data_test(sent_list,batch_size,device,config,need_proj=True, model_name=args.model_name, projection_output=args.projection_output)
-
