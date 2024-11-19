@@ -189,7 +189,7 @@ def process_data_test(data,batch_size,device,config,need_proj=True, model_name="
         
 
 ### used for testing only
-def process_data_test_simcse(data,batch_size,device,config,proj_dir=None,need_proj=False):
+def process_data_test_simcse(data,batch_size,device,config,proj_dir=None,need_proj=False, model_name="gpt2_large", projection_output=1280):
     tokenizer = AutoTokenizer.from_pretrained(config['embed_model_path'])  # dim 1024
     model = AutoModel.from_pretrained(config['embed_model_path']).to(device)
     #save_path = 'logs/attacker_gpt2_qnli_simcse_bert_large.log'
@@ -207,14 +207,14 @@ def process_data_test_simcse(data,batch_size,device,config,proj_dir=None,need_pr
 
     print('load data done')
     if need_proj:
-        projection = linear_projection(in_num=768)
+        projection = linear_projection(in_num=model.get_sentence_embedding_dimension(), out_num=projection_output)
         projection.load_state_dict(torch.load(proj_dir))
         projection.to(device)
         print('load projection done')
     else:
         print('no projection loaded')
     # setup on config for sentence generation   AutoModelForCausalLM
-    attacker_path = 'models/' + 'attacker_gpt2_large_' + config['dataset'] + '_' + config['embed_model']
+    attacker_path = 'models/' + f'attacker_{model_name}_' + config['dataset'] + '_' + config['embed_model']
     config['model'] = AutoModelForCausalLM.from_pretrained(attacker_path).to(device)
     config['tokenizer'] = AutoTokenizer.from_pretrained('microsoft/DialoGPT-large')
 
@@ -327,7 +327,7 @@ if __name__ == '__main__':
         process_data(sent_list,batch_size,device,config, model_name=args.model_name, projection_output=args.projection_output)
     elif(config['data_type'] == 'test'):
         if('simcse' in config['embed_model']):
-            process_data_test_simcse(sent_list,batch_size,device,config,proj_dir=None,need_proj=False, model_name=args.model_name)
+            process_data_test_simcse(sent_list,batch_size,device,config,proj_dir=None,need_proj=False, model_name=args.model_name, projection_output=args.projection_output)
         else:
             process_data_test(sent_list,batch_size,device,config,need_proj=True, model_name=args.model_name, projection_output=args.projection_output)
 
