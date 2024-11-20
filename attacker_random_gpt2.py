@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import torch
 import torch.nn as nn
@@ -79,7 +79,7 @@ def process_data(data,batch_size,device,config,need_proj=True):
 
     ### extra projection
     if need_proj:
-        projection = linear_projection(in_num=768).to(device)
+        projection = linear_projection(in_num=model.get_sentence_embedding_dimension()).to(device)
     ### for attackers
     #model_attacker = AutoModelForCausalLM.from_pretrained(config['model_dir'])
     #tokenizer_attacker = AutoTokenizer.from_pretrained(config['model_dir'])
