@@ -116,6 +116,7 @@ def test(config, data):
     embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
     attack_model = AutoModelForCausalLM.from_pretrained(config['attack_path']).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_cards[config['attack_model']])
+    tokenizer.pad_token = tokenizer.eos_token
 
     dataset = text_dataset(data)
     dataloader = DataLoader(dataset, config['batch_size'], False, collate_fn=dataset.collate) # no shuffle for testing data
@@ -148,7 +149,7 @@ def test(config, data):
             sent_dict['gt'].extend(batch_text)
         
         with open(config['output_path'], 'w') as f:
-            json.dump(sent_dict, f,indent=4)
+            json.dump(sent_dict, f, indent=4)
 
 
 def train_on_batch(batch_X, inputs, model, criterion):
