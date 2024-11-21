@@ -139,7 +139,7 @@ def test(config, data):
             embeddings = embeddings.unsqueeze(1)
             
             if config['beam']:
-                outputs = attack_model.generate(inputs_embeds=embeddings, max_new_tokens=250, num_beams=2, early_stopping=True)
+                outputs = attack_model.generate(inputs_embeds=embeddings, max_new_tokens=250, num_beams=5, early_stopping=True)
             else:
                 outputs = attack_model.generate(inputs_embeds=embeddings, max_new_tokens=250, do_sample=True, temperature=0.9, top_p=0.9, top_k=-1)
             
