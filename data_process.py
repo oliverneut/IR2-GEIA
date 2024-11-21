@@ -13,9 +13,7 @@ list of supported datasets:
 '''
 
 
-def get_sent_list(config):
-    dataset = config['dataset']
-    data_type = config['data_type']
+def get_sent_list(dataset, data_type):
     if dataset == 'personachat':
         sent_list = get_personachat_data(data_type)
         return sent_list
