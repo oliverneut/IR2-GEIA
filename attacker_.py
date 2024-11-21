@@ -75,6 +75,7 @@ def get_gpt2_model(model_name):
 def train(config, data):
     embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
     attack_model, tokenizer = get_gpt2_model(config['attack_model'])
+    tokenizer.pad_token = tokenizer.eos_token
 
     dataset = text_dataset(data)
     dataloader = DataLoader(dataset, config['batch_size'], True, collate_fn=dataset.collate)
@@ -98,7 +99,6 @@ def train(config, data):
             if embed_dim != attack_dim:
                 embeddings = projection(embeddings)
             
-            tokenizer.pad_token = tokenizer.eos_token
             inputs = tokenizer(batch_text, return_tensors='pt', padding='max_length', truncation=True, max_length=40)
 
             train_on_batch(embeddings, inputs, attack_model, SequenceCrossEntropyLoss())
@@ -174,7 +174,6 @@ def train_on_batch(batch_X, inputs, model, criterion):
 
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser(description='Training the GEIA attacker on different sentence embedding models')
     parser.add_argument('--attack_model', type=str, default='gpt2_medium', help='Name of the attacker model')
     parser.add_argument('--embed_model', type=str, default='sent_t5_large', help='Name of embedding model')
