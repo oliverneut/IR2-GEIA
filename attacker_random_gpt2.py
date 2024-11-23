@@ -220,7 +220,7 @@ def process_data_test(data,batch_size,device,config,need_proj=False):
     print('load data done')
     if need_proj:
         proj_path = model_folder_path + 'projection_gpt2_' + config['dataset'] + '_' + config['embed_model']
-        projection = linear_projection(in_num=768)
+        projection = linear_projection(in_num=model.get_sentence_embedding_dimension())
         projection.load_state_dict(torch.load(proj_path))
         projection.to(device)
         print('load projection done')
