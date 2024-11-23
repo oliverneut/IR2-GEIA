@@ -4,6 +4,7 @@ from torch import nn
 from tqdm import tqdm
 import numpy as np
 import json
+from typing import Optional
 
 from transformers import AutoModel, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
@@ -72,8 +73,32 @@ def get_gpt2_model(model_name):
     return model, tokenizer
 
 
+def get_embeddings(embed_model, batch_text, embed_tokenizer: Optional[AutoTokenizer] = None):
+    if embed_tokenizer:
+        inputs = embed_tokenizer(batch_text, padding=True, truncation=True, return_tensors="pt").to(device)
+        embeddings = embed_model(**inputs, output_hidden_states=True, return_dict=True).pooler_output
+    else:
+        embeddings = embed_model.encode(batch_text, convert_to_tensor=True).to(device)
+    return embeddings
+
+
+def get_dimensions(embed_model, attack_model):
+    if isinstance(embed_model, SentenceTransformer):
+        embed_dim = embed_model.get_sentence_embedding_dimension()
+    else:
+        embed_dim = embed_model.config.hidden_size
+    attack_dim = attack_model.config.hidden_size
+    return embed_dim, attack_dim
+
+
 def train(config, data):
-    embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
+    if 'simcse' in config['embed_model']:
+        embed_model = AutoModel.from_pretrained(model_cards[config['embed_model']]).to(device)
+        embed_tokenizer = AutoTokenizer.from_pretrained(model_cards[config['embed_model']])
+    else:
+        embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
+        embed_tokenizer = None
+
     attack_model, tokenizer = get_gpt2_model(config['attack_model'])
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -81,9 +106,8 @@ def train(config, data):
     dataloader = DataLoader(dataset, config['batch_size'], True, collate_fn=dataset.collate)
     optimizer = setup_optimizer(attack_model)
     scheduler = get_linear_schedule_with_warmup(optimizer, 100, len(dataloader) * config['num_epochs'])
-
-    embed_dim = embed_model.get_sentence_embedding_dimension()
-    attack_dim = attack_model.config.hidden_size
+    
+    embed_dim, attack_dim = get_dimensions(embed_model, attack_model)
 
     if embed_dim != attack_dim:
         projection = ProjectionLayer(embed_dim, attack_dim).to(device)
@@ -94,7 +118,7 @@ def train(config, data):
         embed_model.eval()
         for batch_text in tqdm(dataloader, desc="Training"):
             with torch.no_grad():
-                embeddings = embed_model.encode(batch_text, convert_to_tensor=True).to(device)
+                embeddings = get_embeddings(embed_model, batch_text, embed_tokenizer)
 
             if embed_dim != attack_dim:
                 embeddings = projection(embeddings)
@@ -105,6 +129,7 @@ def train(config, data):
             optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
+            
     
     if embed_dim != attack_dim:
         torch.save(projection.state_dict(), config['proj_path'])
@@ -113,7 +138,13 @@ def train(config, data):
 
 
 def test(config, data):
-    embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
+    if 'simcse' in config['embed_model']:
+        embed_model = AutoModel.from_pretrained(model_cards[config['embed_model']]).to(device)
+        embed_tokenizer = AutoTokenizer.from_pretrained(model_cards[config['embed_model']])
+    else:
+        embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
+        embed_tokenizer = None
+
     attack_model = AutoModelForCausalLM.from_pretrained(config['attack_path']).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_cards[config['attack_model']])
     tokenizer.pad_token = tokenizer.eos_token
@@ -121,8 +152,7 @@ def test(config, data):
     dataset = text_dataset(data)
     dataloader = DataLoader(dataset, config['batch_size'], False, collate_fn=dataset.collate) # no shuffle for testing data
 
-    embed_dim = embed_model.get_sentence_embedding_dimension()
-    attack_dim = attack_model.config.hidden_size
+    embed_dim, attack_dim = get_dimensions(embed_model, attack_model)
 
     if embed_dim != attack_dim:
         projection = ProjectionLayer(embed_dim, attack_dim).to(device)
@@ -132,7 +162,7 @@ def test(config, data):
 
     with torch.no_grad():
         for batch_text in tqdm(dataloader, desc="Testing"):
-            embeddings = embed_model.encode(batch_text, convert_to_tensor=True)
+            embeddings = get_embeddings(embed_model, batch_text, embed_tokenizer)
             if embed_dim != attack_dim:
                 embeddings = projection(embeddings).to(device)
             
