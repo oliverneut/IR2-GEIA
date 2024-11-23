@@ -430,7 +430,10 @@ if __name__ == '__main__':
     
     ##### for training
     if(config['data_type'] == 'train'):
-        process_data(sent_list,batch_size,device,config)
+        if('simcse' in config['embed_model']):
+            process_data_simcse(sent_list,batch_size,device,config,need_proj=False)
+        else:
+            process_data(sent_list,batch_size,device,config)
     elif(config['data_type'] == 'test'):
         if('simcse' in config['embed_model']):
             process_data_test_simcse(sent_list,batch_size,device,config,proj_dir=None,need_proj=False)
