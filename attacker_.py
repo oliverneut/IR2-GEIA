@@ -158,7 +158,6 @@ def test(config, data):
 
     attack_model = AutoModelForCausalLM.from_pretrained(config['attack_path']).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_cards[config['attack_model']])
-    tokenizer.pad_token = tokenizer.eos_token
 
     dataset = text_dataset(data)
     dataloader = DataLoader(dataset, config['batch_size'], False, collate_fn=dataset.collate) # no shuffle for testing data
