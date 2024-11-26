@@ -13,9 +13,6 @@ from torch.utils.data import DataLoader, Dataset
 from sentence_transformers import SentenceTransformer
 from attacker_models import SequenceCrossEntropyLoss
 from data_process import get_sent_list
-from decode_beam_search import beam_decode_sentence
-from decode_beam_search_opt import beam_decode_sentence as beam_decode_sentence_opt
-from attacker_evaluation_gpt import generate_sentence
 
 model_cards = {
     'sent_t5_large': 'sentence-t5-large',
@@ -28,6 +25,7 @@ model_cards = {
     'simcse_roberta': 'princeton-nlp/sup-simcse-roberta-large',
     'gpt2_large': 'microsoft/DialoGPT-large',
     'gpt2_medium': 'microsoft/DialoGPT-medium',
+    'llama_3': 'meta-llama/Llama-3.2-1B'
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -73,6 +71,19 @@ def get_gpt2_model(model_name):
     return model, tokenizer
 
 
+def get_language_model(model_name):
+    if 'llama_3' in model_name:
+        model = AutoModelForCausalLM.from_pretrained(model_cards[model_name]).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(model_cards[model_name])
+    elif 'gpt2' in model_name:
+        config = GPT2Config.from_pretrained(model_cards[model_name])
+        tokenizer = AutoTokenizer.from_pretrained(model_cards[model_name])
+        model = GPT2LMHeadModel(config).to(device)
+    else:
+        raise ValueError("Model not found")
+    return model, tokenizer
+
+
 def get_embeddings(embed_model, batch_text, embed_tokenizer: Optional[AutoTokenizer] = None):
     if embed_tokenizer:
         inputs = embed_tokenizer(batch_text, padding=True, truncation=True, return_tensors="pt").to(device)
@@ -99,7 +110,7 @@ def train(config, data):
         embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
         embed_tokenizer = None
 
-    attack_model, tokenizer = get_gpt2_model(config['attack_model'])
+    attack_model, tokenizer = get_language_model(config['attack_model'])
     tokenizer.pad_token = tokenizer.eos_token
 
     dataset = text_dataset(data)
@@ -186,7 +197,7 @@ def train_on_batch(batch_X, inputs, model, criterion):
     input_ids = inputs['input_ids'].to(device) # tensors of input ids
     labels = input_ids.clone()
     
-    input_emb = model.transformer.wte(input_ids) # embed the input ids using GPT-2 embedding
+    input_emb = model.get_input_embeddings()(input_ids) # embed the input ids using GPT-2 embedding
     batch_X = batch_X.to(device)
     batch_X_unsqueeze = torch.unsqueeze(batch_X, 1)     # add extra dim to cat together
     inputs_embeds = torch.cat((batch_X_unsqueeze,input_emb),dim=1)  #[batch,max_length+1,emb_dim (1024)]
