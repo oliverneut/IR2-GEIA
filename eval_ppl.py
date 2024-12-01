@@ -57,41 +57,17 @@ class personachat(Dataset):
 
 def process_data(data,batch_size,device,config,need_porj=False):
     dataset = personachat(data)
-    dataloader = DataLoader(dataset=dataset, 
-                              shuffle=True, 
-                              batch_size=batch_size, 
-                              collate_fn=dataset.collate)
+    dataloader = DataLoader(dataset=dataset, shuffle=True, batch_size=batch_size, collate_fn=dataset.collate)
 
-    print('load data done')
-
-    ### extra projection
-    if need_porj:
-        projection = linear_projection(in_num=768).to(device)
     ### for attackers
-    model_attacker = AutoModelForCausalLM.from_pretrained('dialogpt_qnli')
+    model_attacker = AutoModelForCausalLM.from_pretrained(config['hf_path'])
     tokenizer_attacker = AutoTokenizer.from_pretrained(config['model_dir'])
     criterion = SequenceCrossEntropyLoss()
     model_attacker.to(device)
     model_attacker.eval()
-    param_optimizer = list(model_attacker.named_parameters())
-    no_decay = ['bias', 'ln', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-    {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-    {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
 
-    ]
-    num_gradients_accumulation = 1
     num_epochs = config['num_epochs']
     batch_size = config['batch_size']
-    num_train_optimization_steps  = len(dataloader) * num_epochs // num_gradients_accumulation
-    optimizer = AdamW(optimizer_grouped_parameters, 
-                  lr=3e-5,
-                  eps=1e-06)
-    if need_porj:
-        optimizer.add_param_group({'params': projection.parameters()})
-    scheduler = get_linear_schedule_with_warmup(optimizer, 
-                                            num_warmup_steps=100, 
-                                            num_training_steps = num_train_optimization_steps)
     
     ### process to obtain the embeddings
     for i in range(num_epochs):
@@ -138,34 +114,12 @@ def read_logs(path):
     pred  = data["pred"]
     return pred
 
+
 def get_val_ppl(path,batch_size,device,config):
     sent_list = read_logs(path)
     process_data(sent_list,batch_size,device,config)
 
-def get_qnli_data(data_type):
-    dataset = load_dataset('glue','qnli', cache_dir="/home/hlibt/embed_rev/data", split=data_type)
-    sentence_list = []
-    for i,d in enumerate(dataset):
-        sentence_list.append(d['question'])
-        sentence_list.append(d['sentence'])
-    return sentence_list
-def get_personachat_data(data_type):
 
-    sent_list = get_persona_dict(data_type=data_type)
-    return sent_list
-
-def get_sent_list(config):
-    dataset = config['dataset']
-    data_type = config['data_type']
-    if dataset == 'personachat':
-        sent_list = get_personachat_data(data_type)
-        return sent_list
-    elif dataset == 'qnli':
-        sent_list = get_qnli_data(data_type)
-        return sent_list
-    else:
-        print('Name of dataset only supports: personachat or qnli')
-        sys.exit(-1)
 if __name__ == '__main__':
     model_cards ={}
     model_cards['sent_t5'] = 'sentence-t5-large'
@@ -179,12 +133,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=1, help='Training epoches.')
     parser.add_argument('--batch_size', type=int, default=64, help='Batch_size #.')
     parser.add_argument('--dataset', type=str, default='personachat', help='Name of dataset: personachat or qnli')
-    #parser.add_argument('--dataset', type=str, default='qnli', help='Name of dataset: personachat or qnli')
     parser.add_argument('--data_type', type=str, default='test', help='train/test')
-    #parser.add_argument('--data_type', type=str, default='test', help='train/test')
     parser.add_argument('--embed_model', type=str, default='sent_t5', help='Name of embedding model: mpnet/sent_roberta/simcse_bert/simcse_roberta/sent_t5')
     parser.add_argument('--decode', type=str, default='beam', help='Name of decoding methods: beam/sampling')
-    #parser.add_argument('--embed_model', type=str, default='simcse_roberta', help='Name of embedding model: mpnet/sent_roberta/simcse_bert/simcse_roberta/sent_t5')
+    parser.add_argument('--hf_path', type=str, default='', help='HF path')
     args = parser.parse_args()
     config = {}
     config['model_dir'] = args.model_dir
@@ -198,32 +150,29 @@ if __name__ == '__main__':
     config['device'] = torch.device("cuda")
     config['tokenizer'] = AutoTokenizer.from_pretrained('microsoft/DialoGPT-medium')
     config['eos_token'] = config['tokenizer'].eos_token
-
+    config['hf_path'] = args.hf_path
     
     device = torch.device("cuda")
 
     batch_size = config['batch_size']
 
-
-    
     ### qnli with beam search decoding
-    sbert_roberta_large_pc_path  =  '../models_random/attacker_gpt2_qnli_sent_roberta.log'
-    simcse_roberta_large_pc_path  = '../models_random/attacker_gpt2_qnli_simcse_roberta.log'
-    simcse_bert_large_pc_path = '../models_random/attacker_gpt2_qnli_simcse_bert.log' 
-    sentence_T5_large_pc_path = '../models_random/attacker_gpt2_qnli_sent_t5.log' 
-    mpnet_pc_path = '../models_random/attacker_gpt2_qnli_mpnet.log'
+    # sbert_roberta_large_pc_path  =  '../models_random/attacker_gpt2_qnli_sent_roberta.log'
+    # simcse_roberta_large_pc_path  = '../models_random/attacker_gpt2_qnli_simcse_roberta.log'
+    # simcse_bert_large_pc_path = '../models_random/attacker_gpt2_qnli_simcse_bert.log' 
+    # sentence_T5_large_pc_path = '../models_random/attacker_gpt2_qnli_sent_t5.log' 
+    mpnet_pc_path = 'logs/personachat/gpt2_medium/output_sent_roberta_beam.log'
     
 
-    
     print('===mpnet===')
     get_val_ppl(mpnet_pc_path,batch_size,device,config)
     print('===sen_roberta===')
-    get_val_ppl(sbert_roberta_large_pc_path,batch_size,device,config)
-    print('===st5===')
-    get_val_ppl(sentence_T5_large_pc_path,batch_size,device,config)
-    print('===simcse_bert===')
-    get_val_ppl(simcse_bert_large_pc_path,batch_size,device,config)
-    print('===simcse_roberta===')
-    get_val_ppl(simcse_roberta_large_pc_path,batch_size,device,config)
+    # get_val_ppl(sbert_roberta_large_pc_path,batch_size,device,config)
+    # print('===st5===')
+    # get_val_ppl(sentence_T5_large_pc_path,batch_size,device,config)
+    # print('===simcse_bert===')
+    # get_val_ppl(simcse_bert_large_pc_path,batch_size,device,config)
+    # print('===simcse_roberta===')
+    # get_val_ppl(simcse_roberta_large_pc_path,batch_size,device,config)
 
 
