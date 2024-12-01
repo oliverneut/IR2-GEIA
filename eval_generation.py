@@ -1,79 +1,56 @@
-import os
-import sys
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-#sys.path.append('..')
-#from text_eval import punctuation_remove
-import evaluate
+import argparse
 import json
 import nltk
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 import torch
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from attacker_models import SequenceCrossEntropyLoss
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from evaluate import load
-# from ppl import calucate_ppl
-import editdistance
-import string
+from attacker_ import setup_optimizer, get_linear_schedule_with_warmup
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = SentenceTransformer('sentence-t5-base')
+model = SentenceTransformer('sentence-t5-base').to(device)
+model.eval()
 
 rouge = load('rouge')
-device = "cpu"
-model = model.to(device)
-model.eval()
-# model_id = "gpt2-large"
+
+model_cards = {
+    'sent_t5_large': 'sentence-t5-large',
+    'sent_t5_base': 'sentence-t5-base',
+    'sent_t5_xl': 'sentence-t5-xl',
+    'sent_t5_xxl': 'sentence-t5-xxl',
+    'mpnet': 'all-mpnet-base-v1',
+    'sent_roberta': 'all-roberta-large-v1',
+    'simcse_bert': 'princeton-nlp/sup-simcse-bert-large-uncased',
+    'simcse_roberta': 'princeton-nlp/sup-simcse-roberta-large',
+    'gpt2_large': 'microsoft/DialoGPT-large',
+    'gpt2_medium': 'microsoft/DialoGPT-medium',
+    'llama_3_1B': 'meta-llama/Llama-3.2-1B',
+    'llama_3_3B': 'meta-llama/Llama-3.2-3B'
+}
+
+class text_dataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):  
+        return self.data[index]
+        
+    def collate(self, unpacked_data):
+        return unpacked_data
 
 
-
-
-#model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
-#tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
-perplexity = load("perplexity", module_type="metric")
-
-#self training GPT-2 for PPL evaluation
-# ppl_model = GPT2LMHeadModel.from_pretrained("gpt_large_persona")
-# device = torch.device("cuda")
-# ppl_model = ppl_model.to(device)
-# ppl_model.eval()
-# model = model.to(device)
-
-# remove punctuation from list of sentences 
-def punctuation_remove(sent_list):
-    removed_list = []
-    for sent in sent_list:
-        word_list = []
-        for word in sent.split():
-            word_strip = word.strip(string.punctuation)
-            if word_strip:  # cases for not empty string
-                word_list.append(word_strip)
-        removed_sent = ' '.join(word_list)
-        removed_list.append(removed_sent)
-    return removed_list
-
-
-def read_gpt(path):
+def read_logs(path):
     with open(path) as f:
         data = json.load(f)
     return data
-
-def get_ppl(data,gpt_train= True):
-    gt = data['gt']
-    pred = data["pred"]
-    if(gpt_train):
-        ppl_gt,var_gt,ppl_pred,var_pred = calucate_ppl(gt,pred,ppl_model)
-        print(f"GT: Validation Perplexity: {ppl_gt} Variance: {var_gt}")
-        print(f"PRED: Validation Perplexity: {ppl_pred} Variance: {var_pred}")
-    else:
-        results_pred = perplexity.compute(model_id=model_id,
-                                add_start_token=True,
-                                predictions=pred)
-        results_gt = perplexity.compute(model_id=model_id,
-                                add_start_token=True,
-                                predictions=gt)
-        print(f'results_pred: {results_pred["mean_perplexity"]}')
-        print(f'results_gt: {results_gt["mean_perplexity"]}')
 
 
 def get_rouge(data):
@@ -82,12 +59,13 @@ def get_rouge(data):
     results = rouge.compute(predictions=pred,references=gt)
     print(results)
 
+
 def get_bleu(data):
     gt = data['gt']
     pred = data["pred"]
-    cands_list_bleu = [sentence.split() for sentence in pred] 
+    cands_list_bleu = [sentence.split() for sentence in pred]
     refs_list_bleu = [[sentence.split()] for sentence in gt]
-    bleu_score = nltk.translate.bleu_score.corpus_bleu(refs_list_bleu, cands_list_bleu) 
+    bleu_score = nltk.translate.bleu_score.corpus_bleu(refs_list_bleu, cands_list_bleu)
     bleu_score_1 = nltk.translate.bleu_score.corpus_bleu(refs_list_bleu, cands_list_bleu,weights=(1, 0, 0, 0)) 
     bleu_score_2 = nltk.translate.bleu_score.corpus_bleu(refs_list_bleu, cands_list_bleu,weights=(0.5, 0.5, 0, 0)) 
     print(f'bleu1 : {bleu_score_1}')
@@ -115,91 +93,86 @@ def embed_similarity(data,batch_size=16):
     gt_batch = list(batch(gt, batch_size))
     pred_batch = list(batch(pred, batch_size))
     cosine_scores_all = []
-    for i in range(len(gt_batch)):
-
-        embeddings1 = model.encode(gt_batch[i], convert_to_tensor=True)
-        embeddings2 = model.encode(pred_batch[i], convert_to_tensor=True)
-        cosine_scores = util.cos_sim(embeddings1, embeddings2)
+    for gt, pred in tqdm(zip(gt_batch, pred_batch), desc='Embedding similarity'):
+        gt_emb = model.encode(gt, convert_to_tensor=True)
+        pred_emb = model.encode(pred, convert_to_tensor=True)
+        cosine_scores = util.cos_sim(gt_emb, pred_emb)
         assert cosine_scores.size()[0] == cosine_scores.size()[1]
-        score_list = [cosine_scores[k][k].item() for k in range(cosine_scores.size()[0])]
-        cosine_scores_all.extend(score_list)
-        #print(f'{i}-th: {np.mean(score_list).item()}')
-    #cosine_scores_all = torch.stack(cosine_scores_all)
+        cosine_scores_all.extend(cosine_scores.diag().tolist())
+
     avg_score = np.mean(cosine_scores_all)
     print(f'Avg embed similarity: {avg_score}')
-    #print(f'Avg embed similarity running mean: {np.mean(running_mean)}')
-    #sys.exit()
 
-def get_edit_dist(data):
-    gt = data['gt']
-    pred = data["pred"]
-    assert len(gt) == len(pred)
-    edit_dist_list = []
-    for i,d in enumerate(pred):
-        gt_str = gt[i]
-        pred_str = pred[i]
-        dist = editdistance.distance(gt_str, pred_str)
-        edit_dist_list.append(dist)
-    ### now we return mean and median
-    edit_dist_list = np.array(edit_dist_list)
-    edit_median  = np.median(edit_dist_list)
-    edit_mean = np.mean(edit_dist_list)
-    print(f'edit_mean: {edit_mean}')
-    print(f'edit_median: {edit_median}')
-    return edit_mean,edit_median
 
-def exact_match(data):
-    gt = data['gt']
-    pred = data["pred"]
+def calculate_ppl(data, config):
+    dataset = text_dataset(data)
+    dataloader = DataLoader(dataset, config['batch_size'], True, collate_fn=dataset.collate)
+    
+    attack_model = AutoModelForCausalLM.from_pretrained(model_cards[config['attack_model']]).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(model_cards[config['attack_model']])
+    tokenizer.pad_token = tokenizer.eos_token
+    criterion = SequenceCrossEntropyLoss()
 
-    gt_remove = punctuation_remove(gt)       
-    pred_remove = punctuation_remove(pred) 
+    attack_model.eval()
+    
+    for epoch in range(config['num_epochs']):
+        print(f"Epoch {epoch+1}/{config['num_epochs']}")
+        running_ppl = []
+        for batch_text in tqdm(dataloader, desc='Calculating PPL'):
+            inputs = tokenizer(batch_text, return_tensors='pt', padding='max_length', truncation=True, max_length=40)
+            input_ids = inputs['input_ids'].to(device) # tensors of input ids
+            labels = input_ids.clone()
+            
+            logits, _ = attack_model(input_ids, past_key_values=None, return_dict=False)
+            logits = logits[:, :-1].contiguous()
+            target = labels[:, 1:].contiguous()
 
-    assert len(gt) == len(pred)
-    count = 0 
-    for i,d in enumerate(pred):
-        gt_str = gt[i]
-        pred_str = pred[i]
-        if(gt_str == pred_str):
-            count += 1
-    ratio = count/len(gt)
-    count = 0 
-    for i,d in enumerate(pred):
-        gt_str = gt_remove[i]
-        pred_str = pred_remove[i]
-        if(gt_str == pred_str):
-            count += 1
-    ratio_remove = count/len(gt_remove)
-    print(f'exact_match ratio: {ratio}')
+            target_mask = torch.ones_like(target).float()
 
-    print(f'exact_match ratio after removing punctuation: {ratio_remove}')
+            loss = criterion(logits, target, target_mask, label_smoothing=0.02, reduce="batch")   
 
-    return ratio
+            perplexity = np.exp(loss.item())
+            
+            running_ppl.append(perplexity)
 
-def remove_eos(data):
-    gt = data['gt']
-    pred = data["pred"]
-    for i,s in enumerate(pred):
-        pred[i] = s.replace('<|endoftext|>','')
+        print(f'Validate ppl: {np.mean(running_ppl)}')
 
-def report_metrics(data):
-    remove_eos(data)
-    get_rouge(data)
+
+def report_metrics(data, config):
+    # get_rouge(data)
     # get_bleu(data)
-    # # get_ppl(data)     ### ppl please refer to ppl.py for ppl calculation
+    # embed_similarity(data)
+    calculate_ppl(data['pred'], config)
+
     # exact_match(data)
     # get_edit_dist(data)
     # embed_similarity(data)
 
 
 if __name__ == '__main__':
-    
+    parser = argparse.ArgumentParser(description='Evaluate generation')
+    parser.add_argument('--attack_model', type=str, default='gpt2_medium', help='Name of the attacker model')
+    parser.add_argument('--embed_model', type=str, default='sent_t5_large', help='Name of embedding model')
+    parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+    parser.add_argument('--dataset', type=str, default='personachat', help='Name of dataset: PersonaChat or QNLI')
+    parser.add_argument('--beam', type=bool, default=True, help='Toggle beam decoding method (sampling/beam)')
 
-    path_list = [abcd_path,mnli_path,woz_path,sst2_path,wmt_path]
+    args = parser.parse_args()
+
+    config = {
+        'attack_model': args.attack_model,
+        'embed_model': args.embed_model,
+        'num_epochs': args.num_epochs,
+        'batch_size': args.batch_size,
+        'path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log'
+    }
+
+    path_list = [config['path']]
     for p in path_list:
         print(f'==={p}===')
-        data = read_gpt(p)
-        report_metrics(data)
+        data = read_logs(p)
+        report_metrics(data, config)
 
 
 
