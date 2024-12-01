@@ -1,6 +1,6 @@
 import os
 import sys
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 #sys.path.append('..')
 #from text_eval import punctuation_remove
 import evaluate
@@ -12,15 +12,15 @@ import torch
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 from tqdm import tqdm
 from evaluate import load
-from ppl import calucate_ppl
+# from ppl import calucate_ppl
 import editdistance
 import string
 
 
-model = SentenceTransformer('sentence-t5-xxl')
+model = SentenceTransformer('sentence-t5-base')
 
-rouge = evaluate.load('rouge')
-device = "cuda"
+rouge = load('rouge')
+device = "cpu"
 model = model.to(device)
 model.eval()
 # model_id = "gpt2-large"
@@ -185,21 +185,15 @@ def remove_eos(data):
 def report_metrics(data):
     remove_eos(data)
     get_rouge(data)
-    get_bleu(data)
-    # get_ppl(data)     ### ppl please refer to ppl.py for ppl calculation
-    exact_match(data)
-    get_edit_dist(data)
-    embed_similarity(data)
+    # get_bleu(data)
+    # # get_ppl(data)     ### ppl please refer to ppl.py for ppl calculation
+    # exact_match(data)
+    # get_edit_dist(data)
+    # embed_similarity(data)
 
 
 if __name__ == '__main__':
-
-
-    abcd_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_abcd_simcse_bert_beam.log'
-    mnli_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_mnli_simcse_bert_beam.log'
-    woz_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_multi_woz_simcse_bert_beam.log'
-    sst2_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_sst2_simcse_bert_beam.log'
-    wmt_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_wmt16_simcse_bert_beam.log'
+    
 
     path_list = [abcd_path,mnli_path,woz_path,sst2_path,wmt_path]
     for p in path_list:
