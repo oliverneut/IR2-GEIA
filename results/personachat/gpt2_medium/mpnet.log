@@ -1,0 +1,10 @@
+2024-11-22 09:38:13,696 - INFO -  =====models/personachat/output_gpt2_medium_mpnet_beam.log=====
+2024-11-22 09:45:22,151 - INFO -  micro precision_score on token level: 0.6459397850409656
+2024-11-22 09:45:22,152 - INFO -  micro recall_score on token level: 0.5992511467772749
+2024-11-22 09:45:22,152 - INFO -  micro f1_score on token level: 0.6217201668336063
+2024-11-22 09:45:25,770 - INFO -  word level precision: 0.7163881037237311
+2024-11-22 09:45:25,771 - INFO -  word level recall: 0.6659011956579047
+2024-11-22 09:45:25,771 - INFO -  word level f1: 0.6902226546036869
+2024-11-22 09:45:27,773 - INFO -  word level precision without punctuation: 0.6867893381149582
+2024-11-22 09:45:27,773 - INFO -  word level recall without punctuation: 0.6331440049401817
+2024-11-22 09:45:27,773 - INFO -  word level f1 without punctuation: 0.6588765324737402

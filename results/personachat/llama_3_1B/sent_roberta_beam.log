@@ -1,0 +1,10 @@
+2024-11-28 15:57:59,680 - INFO -  =====logs/personachat/llama_3_1B/output_sent_roberta_beam.log=====
+2024-11-28 16:05:07,335 - INFO -  micro precision_score on token level: 0.585385389967045
+2024-11-28 16:05:07,335 - INFO -  micro recall_score on token level: 0.5226443815575739
+2024-11-28 16:05:07,335 - INFO -  micro f1_score on token level: 0.5522385642963162
+2024-11-28 16:05:11,015 - INFO -  word level precision: 0.6348328581542642
+2024-11-28 16:05:11,015 - INFO -  word level recall: 0.5638221217216068
+2024-11-28 16:05:11,015 - INFO -  word level f1: 0.5972240803774835
+2024-11-28 16:05:13,031 - INFO -  word level precision without punctuation: 0.6125308536103384
+2024-11-28 16:05:13,031 - INFO -  word level recall without punctuation: 0.5317956339108189
+2024-11-28 16:05:13,031 - INFO -  word level f1 without punctuation: 0.5693152035504594

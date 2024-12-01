@@ -1,0 +1,10 @@
+2024-11-23 14:52:07,842 - INFO -  =====models/qnli/output_gpt2_medium_sent_roberta_beam.log=====
+2024-11-23 14:57:20,788 - INFO -  micro precision_score on token level: 0.42577211705256807
+2024-11-23 14:57:20,788 - INFO -  micro recall_score on token level: 0.3578049611395885
+2024-11-23 14:57:20,788 - INFO -  micro f1_score on token level: 0.3888408174159359
+2024-11-23 14:57:23,565 - INFO -  word level precision: 0.4363106276666652
+2024-11-23 14:57:23,565 - INFO -  word level recall: 0.37409007262260696
+2024-11-23 14:57:23,565 - INFO -  word level f1: 0.4028117802257004
+2024-11-23 14:57:25,877 - INFO -  word level precision without punctuation: 0.38624188022892925
+2024-11-23 14:57:25,877 - INFO -  word level recall without punctuation: 0.3230297321450136
+2024-11-23 14:57:25,877 - INFO -  word level f1 without punctuation: 0.35181898989567156

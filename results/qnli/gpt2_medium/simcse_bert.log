@@ -1,0 +1,10 @@
+2024-11-24 16:27:51,761 - INFO -  =====models/qnli/output_gpt2_medium_simcse_bert_beam.log=====
+2024-11-24 16:33:04,867 - INFO -  micro precision_score on token level: 0.45977718229204906
+2024-11-24 16:33:04,867 - INFO -  micro recall_score on token level: 0.39693078013959643
+2024-11-24 16:33:04,868 - INFO -  micro f1_score on token level: 0.42604883731807186
+2024-11-24 16:33:07,670 - INFO -  word level precision: 0.48005133716437665
+2024-11-24 16:33:07,670 - INFO -  word level recall: 0.42226635724488787
+2024-11-24 16:33:07,670 - INFO -  word level f1: 0.44930855438371964
+2024-11-24 16:33:10,013 - INFO -  word level precision without punctuation: 0.43380972069321083
+2024-11-24 16:33:10,013 - INFO -  word level recall without punctuation: 0.3740550201676207
+2024-11-24 16:33:10,013 - INFO -  word level f1 without punctuation: 0.40172245579105537
