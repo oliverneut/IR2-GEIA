@@ -108,7 +108,7 @@ def calculate_ppl(data, config):
     dataset = text_dataset(data)
     dataloader = DataLoader(dataset, config['batch_size'], True, collate_fn=dataset.collate)
     
-    attack_model = AutoModelForCausalLM.from_pretrained(model_cards[config['attack_model']]).to(device)
+    attack_model = AutoModelForCausalLM.from_pretrained(config['hf_path']).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_cards[config['attack_model']])
     tokenizer.pad_token = tokenizer.eos_token
     criterion = SequenceCrossEntropyLoss()
@@ -144,10 +144,6 @@ def report_metrics(data, config):
     # embed_similarity(data)
     calculate_ppl(data['pred'], config)
 
-    # exact_match(data)
-    # get_edit_dist(data)
-    # embed_similarity(data)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate generation')
@@ -165,7 +161,8 @@ if __name__ == '__main__':
         'embed_model': args.embed_model,
         'num_epochs': args.num_epochs,
         'batch_size': args.batch_size,
-        'path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log'
+        'path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log',
+        'hf_path': f'oliverneut/{args.dataset}-{args.attack_model}-{args.embed_model}-attacker'
     }
 
     path_list = [config['path']]
@@ -173,6 +170,3 @@ if __name__ == '__main__':
         print(f'==={p}===')
         data = read_logs(p)
         report_metrics(data, config)
-
-
-
