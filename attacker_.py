@@ -5,10 +5,12 @@ from tqdm import tqdm
 import numpy as np
 import json
 from typing import Optional
+import os
 
 from transformers import AutoModel, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import AutoModelForCausalLM,GPT2Config,GPT2LMHeadModel
+from transformers import LlamaConfig, LlamaForCausalLM
 from torch.utils.data import DataLoader, Dataset
 from sentence_transformers import SentenceTransformer
 from attacker_models import SequenceCrossEntropyLoss
@@ -25,7 +27,8 @@ model_cards = {
     'simcse_roberta': 'princeton-nlp/sup-simcse-roberta-large',
     'gpt2_large': 'microsoft/DialoGPT-large',
     'gpt2_medium': 'microsoft/DialoGPT-medium',
-    'llama_3': 'meta-llama/Llama-3.2-1B'
+    'llama_3_1B': 'meta-llama/Llama-3.2-1B',
+    'llama_3_3B': 'meta-llama/Llama-3.2-3B'
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -235,10 +238,12 @@ if __name__ == '__main__':
         'data_type': args.data_type,
         'beam': args.beam,
         'base_path': f'models/{args.dataset}',
-        'attack_path': f'models/{args.dataset}/attacker_{args.attack_model}_{args.embed_model}',
-        'proj_path': f'models/{args.dataset}/projection_{args.attack_model}_{args.embed_model}',
-        'output_path': f'models/{args.dataset}/output_{args.attack_model}_{args.embed_model}{"_beam" if args.beam else ""}.log'
+        'attack_path': f'models/{args.dataset}/{args.attack_model}/attacker_{args.embed_model}',
+        'proj_path': f'models/{args.dataset}/{args.attack_model}/projection_{args.embed_model}',
+        'output_path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log'
     }
+
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
     sent_list = get_sent_list(args.dataset, args.data_type)
 
