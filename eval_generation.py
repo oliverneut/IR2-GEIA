@@ -9,7 +9,6 @@ from attacker_models import SequenceCrossEntropyLoss
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from evaluate import load
-from attacker_ import setup_optimizer, get_linear_schedule_with_warmup
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -93,7 +92,7 @@ def embed_similarity(data,batch_size=16):
     gt_batch = list(batch(gt, batch_size))
     pred_batch = list(batch(pred, batch_size))
     cosine_scores_all = []
-    for gt, pred in tqdm(zip(gt_batch, pred_batch), desc='Embedding similarity'):
+    for gt, pred in zip(gt_batch, pred_batch):
         gt_emb = model.encode(gt, convert_to_tensor=True)
         pred_emb = model.encode(pred, convert_to_tensor=True)
         cosine_scores = util.cos_sim(gt_emb, pred_emb)
@@ -118,7 +117,7 @@ def calculate_ppl(data, config):
     for epoch in range(config['num_epochs']):
         print(f"Epoch {epoch+1}/{config['num_epochs']}")
         running_ppl = []
-        for batch_text in tqdm(dataloader, desc='Calculating PPL'):
+        for batch_text in dataloader:
             inputs = tokenizer(batch_text, return_tensors='pt', padding='max_length', truncation=True, max_length=40)
             input_ids = inputs['input_ids'].to(device) # tensors of input ids
             labels = input_ids.clone()
@@ -139,9 +138,9 @@ def calculate_ppl(data, config):
 
 
 def report_metrics(data, config):
-    # get_rouge(data)
-    # get_bleu(data)
-    # embed_similarity(data)
+    get_rouge(data)
+    get_bleu(data)
+    embed_similarity(data)
     calculate_ppl(data['pred'], config)
 
 
