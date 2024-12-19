@@ -127,12 +127,24 @@ def train(config, data):
         projection = ProjectionLayer(embed_dim, attack_dim).to(device)
         optimizer.add_param_group({'params': projection.parameters()})
 
+    if config['noise'] and type(config['std']) != float:
+        std_path = "overall_avg_diff_" + config['embed_model'] + ".pt"
+        std_tensor = torch.load(std_path)
+        # std_tensor = torch.sqrt(variances)
+
     for epoch in range(config['num_epochs']):
         print(f"Epoch {epoch+1}/{config['num_epochs']}")
         embed_model.eval()
         for batch_text in tqdm(dataloader, desc="Training"):
             with torch.no_grad():
                 embeddings = get_embeddings(embed_model, batch_text, embed_tokenizer)
+
+                if config['noise'] and np.random.rand() > 0.25:
+                    if type(config['std']) != float:
+                        noise = torch.normal(mean=0.0, std=std_tensor.expand(embeddings.size(0), -1))
+                    else:
+                        noise = torch.normal(mean=0, std=config['std'], size=embeddings.shape).to(device)
+                    embeddings += noise
 
             if embed_dim != attack_dim:
                 embeddings = projection(embeddings)
@@ -226,6 +238,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='personachat', help='Name of dataset: PersonaChat or QNLI')
     parser.add_argument('--data_type', type=str, default='test', help='train/test')
     parser.add_argument('--beam', type=bool, default=True, help='Toggle beam decoding method (sampling/beam)')
+    parser.add_argument('--noise', type=bool, default=False, help='Toggle adding Gaussian noise to the embeddings during training')
+    parser.add_argument('--std', type=float, default=None, help='Size of the std of the Gaussian noise')
 
     args = parser.parse_args()
 
@@ -238,9 +252,11 @@ if __name__ == '__main__':
         'data_type': args.data_type,
         'beam': args.beam,
         'base_path': f'models/{args.dataset}',
-        'attack_path': f'models/{args.dataset}/{args.attack_model}/attacker_{args.embed_model}',
-        'proj_path': f'models/{args.dataset}/{args.attack_model}/projection_{args.embed_model}',
-        'output_path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log'
+        'attack_path': f'models/{args.dataset}/attacker_{args.attack_model}_{args.embed_model}{"_noise" if args.noise else ""}{"_std_" + str(args.std) if args.std is not None else ""}',
+        'proj_path': f'models/{args.dataset}/projection_{args.attack_model}_{args.embed_model}{"_noise" if args.noise else ""}{"_std_" + str(args.std) if args.std is not None else ""}',
+        'output_path': f'models/{args.dataset}/output_{args.attack_model}_{args.embed_model}{"_beam" if args.beam else ""}{"_noise" if args.noise else ""}{"_std_" + str(args.std) if args.std is not None else ""}.log',
+        'noise' : args.noise,
+        'std' : args.std
     }
 
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
