@@ -5,16 +5,17 @@ from tqdm import tqdm
 import numpy as np
 import json
 from typing import Optional
-import os
 
 from transformers import AutoModel, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import AutoModelForCausalLM,GPT2Config,GPT2LMHeadModel
-from transformers import LlamaConfig, LlamaForCausalLM
 from torch.utils.data import DataLoader, Dataset
 from sentence_transformers import SentenceTransformer
 from attacker_models import SequenceCrossEntropyLoss
 from data_process import get_sent_list
+from decode_beam_search import beam_decode_sentence
+from decode_beam_search_opt import beam_decode_sentence as beam_decode_sentence_opt
+from attacker_evaluation_gpt import generate_sentence
 
 model_cards = {
     'sent_t5_large': 'sentence-t5-large',
@@ -27,8 +28,7 @@ model_cards = {
     'simcse_roberta': 'princeton-nlp/sup-simcse-roberta-large',
     'gpt2_large': 'microsoft/DialoGPT-large',
     'gpt2_medium': 'microsoft/DialoGPT-medium',
-    'llama_3_1B': 'meta-llama/Llama-3.2-1B',
-    'llama_3_3B': 'meta-llama/Llama-3.2-3B'
+    "llama-2-7b": "meta-llama/Llama-2-7b-hf"
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -74,16 +74,16 @@ def get_gpt2_model(model_name):
     return model, tokenizer
 
 
-def get_language_model(model_name):
-    if 'llama_3' in model_name:
-        model = AutoModelForCausalLM.from_pretrained(model_cards[model_name]).to(device)
-        tokenizer = AutoTokenizer.from_pretrained(model_cards[model_name])
-    elif 'gpt2' in model_name:
-        config = GPT2Config.from_pretrained(model_cards[model_name])
-        tokenizer = AutoTokenizer.from_pretrained(model_cards[model_name])
-        model = GPT2LMHeadModel(config).to(device)
-    else:
-        raise ValueError("Model not found")
+def get_llama_model_random(model_name):
+    # Load the LLaMA configuration
+    config = LlamaConfig.from_pretrained(model_cards[model_name])
+    
+    # Load the tokenizer for LLaMA
+    tokenizer = AutoTokenizer.from_pretrained(model_cards[model_name])
+    
+    # Create a LLaMA model with RANDOMLY initialized weights
+    model = LlamaForCausalLM(config).to(device)
+    
     return model, tokenizer
 
 
@@ -113,7 +113,10 @@ def train(config, data):
         embed_model = SentenceTransformer(model_cards[config['embed_model']], device=device)
         embed_tokenizer = None
 
-    attack_model, tokenizer = get_language_model(config['attack_model'])
+    if "llama" in config['attack_model']:
+        attack_model, tokenizer = get_llama_model_random(config['attack_model'])
+    else:
+        attack_model, tokenizer = get_gpt2_model(config['attack_model'])
     tokenizer.pad_token = tokenizer.eos_token
 
     dataset = text_dataset(data)
@@ -127,19 +130,31 @@ def train(config, data):
         projection = ProjectionLayer(embed_dim, attack_dim).to(device)
         optimizer.add_param_group({'params': projection.parameters()})
 
+    if config['noise'] and type(config['std']) != float:
+        std_path = "overall_avg_diff_" + config['embed_model'] + ".pt"
+        std_tensor = torch.load(std_path)
+        # std_tensor = torch.sqrt(variances)
+
     for epoch in range(config['num_epochs']):
         print(f"Epoch {epoch+1}/{config['num_epochs']}")
         embed_model.eval()
         for batch_text in tqdm(dataloader, desc="Training"):
             with torch.no_grad():
                 embeddings = get_embeddings(embed_model, batch_text, embed_tokenizer)
+                if config['noise'] and np.random.rand() > 0.25:
+                    if type(config['std']) != float:
+                        noise = torch.normal(mean=0.0, std=std_tensor.expand(embeddings.size(0), -1))
+                    else:
+                        noise = torch.normal(mean=0, std=config['std'], size=embeddings.shape).to(device)
+                    embeddings += noise
+
 
             if embed_dim != attack_dim:
                 embeddings = projection(embeddings)
             
             inputs = tokenizer(batch_text, return_tensors='pt', padding='max_length', truncation=True, max_length=40)
 
-            train_on_batch(embeddings, inputs, attack_model, SequenceCrossEntropyLoss())
+            train_on_batch(embeddings, inputs, attack_model, SequenceCrossEntropyLoss(), config['attack_model'])
             optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
@@ -161,6 +176,7 @@ def test(config, data):
 
     attack_model = AutoModelForCausalLM.from_pretrained(config['attack_path']).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_cards[config['attack_model']])
+    tokenizer.pad_token = tokenizer.eos_token
 
     dataset = text_dataset(data)
     dataloader = DataLoader(dataset, config['batch_size'], False, collate_fn=dataset.collate) # no shuffle for testing data
@@ -195,11 +211,14 @@ def test(config, data):
             json.dump(sent_dict, f, indent=4)
 
 
-def train_on_batch(batch_X, inputs, model, criterion):
+def train_on_batch(batch_X, inputs, model, criterion, model_name):
     input_ids = inputs['input_ids'].to(device) # tensors of input ids
     labels = input_ids.clone()
     
-    input_emb = model.get_input_embeddings()(input_ids) # embed the input ids using GPT-2 embedding
+    if "llama" in model_name:
+        input_emb = model.model.embed_tokens(input_ids)
+    else:
+        input_emb = model.transformer.wte(input_ids) # embed the input ids using GPT-2 embedding
     batch_X = batch_X.to(device)
     batch_X_unsqueeze = torch.unsqueeze(batch_X, 1)     # add extra dim to cat together
     inputs_embeds = torch.cat((batch_X_unsqueeze,input_emb),dim=1)  #[batch,max_length+1,emb_dim (1024)]
@@ -226,6 +245,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='personachat', help='Name of dataset: PersonaChat or QNLI')
     parser.add_argument('--data_type', type=str, default='test', help='train/test')
     parser.add_argument('--beam', type=bool, default=True, help='Toggle beam decoding method (sampling/beam)')
+    parser.add_argument('--noise', type=bool, default=False, help='Toggle adding Gaussian noise to the embeddings during training')
+    parser.add_argument('--std', type=float, default=None, help='Size of the std of the Gaussian noise')
 
     args = parser.parse_args()
 
@@ -238,12 +259,12 @@ if __name__ == '__main__':
         'data_type': args.data_type,
         'beam': args.beam,
         'base_path': f'models/{args.dataset}',
-        'attack_path': f'models/{args.dataset}/{args.attack_model}/attacker_{args.embed_model}',
-        'proj_path': f'models/{args.dataset}/{args.attack_model}/projection_{args.embed_model}',
-        'output_path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log'
+        'attack_path': f'models/{args.dataset}/attacker_{args.attack_model}_{args.embed_model}{"_noise" if args.noise else ""}{"_std_" + str(args.std) if args.std is not None else ""}',
+        'proj_path': f'models/{args.dataset}/projection_{args.attack_model}_{args.embed_model}{"_noise" if args.noise else ""}{"_std_" + str(args.std) if args.std is not None else ""}',
+        'output_path': f'models/{args.dataset}/output_{args.attack_model}_{args.embed_model}{"_beam" if args.beam else ""}{"_noise" if args.noise else ""}{"_std_" + str(args.std) if args.std is not None else ""}.log',
+        'noise' : args.noise,
+        'std' : args.std
     }
-
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
     sent_list = get_sent_list(args.dataset, args.data_type)
 
