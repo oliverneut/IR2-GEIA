@@ -10,7 +10,6 @@ import os
 from transformers import AutoModel, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import AutoModelForCausalLM,GPT2Config,GPT2LMHeadModel
-from transformers import LlamaConfig, LlamaForCausalLM
 from torch.utils.data import DataLoader, Dataset
 from sentence_transformers import SentenceTransformer
 from attacker_models import SequenceCrossEntropyLoss
@@ -65,13 +64,6 @@ def setup_optimizer(attack_model):
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=3e-5, eps=1e-06)
     return optimizer
-
-
-def get_gpt2_model(model_name):
-    config = GPT2Config.from_pretrained(model_cards[model_name])
-    tokenizer = AutoTokenizer.from_pretrained(model_cards[model_name])
-    model = GPT2LMHeadModel(config).to(device)
-    return model, tokenizer
 
 
 def get_language_model(model_name):
@@ -258,7 +250,7 @@ if __name__ == '__main__':
         'noise' : args.noise,
         'std' : args.std
     }
-
+    
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
     sent_list = get_sent_list(args.dataset, args.data_type)
