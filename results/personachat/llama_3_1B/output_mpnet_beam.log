@@ -1,0 +1,10 @@
+2024-11-28 15:19:51,187 - INFO -  =====logs/personachat/llama_3_1B/output_mpnet_beam.log=====
+2024-11-28 15:26:57,587 - INFO -  micro precision_score on token level: 0.6561823075071659
+2024-11-28 15:26:57,587 - INFO -  micro recall_score on token level: 0.6127621752500434
+2024-11-28 15:26:57,587 - INFO -  micro f1_score on token level: 0.6337293767730825
+2024-11-28 15:27:01,273 - INFO -  word level precision: 0.7189416081089485
+2024-11-28 15:27:01,273 - INFO -  word level recall: 0.6762643452586686
+2024-11-28 15:27:01,273 - INFO -  word level f1: 0.6969502598716434
+2024-11-28 15:27:03,317 - INFO -  word level precision without punctuation: 0.6920899467078754
+2024-11-28 15:27:03,317 - INFO -  word level recall without punctuation: 0.6455148171522024
+2024-11-28 15:27:03,317 - INFO -  word level f1 without punctuation: 0.6679915135959327

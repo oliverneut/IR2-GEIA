@@ -1,16 +1,11 @@
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from sklearn import metrics
 import numpy as np
 import argparse
 import torch
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoTokenizer
 import json
 from sentence_transformers import SentenceTransformer, util
-from scipy.spatial.distance import cosine
 from simcse import SimCSE
-import logging
-import logging.handlers
 from nltk.tokenize import word_tokenize
 import string
 import re
@@ -18,15 +13,22 @@ import re
 import nltk
 nltk.download('punkt_tab')
 
-from transformers import AutoModelForCausalLM
+model_cards = {
+    'sent_t5_large': 'sentence-t5-large',
+    'sent_t5_base': 'sentence-t5-base',
+    'sent_t5_xl': 'sentence-t5-xl',
+    'sent_t5_xxl': 'sentence-t5-xxl',
+    'mpnet': 'all-mpnet-base-v1',
+    'sent_roberta': 'all-roberta-large-v1',
+    'simcse_bert': 'princeton-nlp/sup-simcse-bert-large-uncased',
+    'simcse_roberta': 'princeton-nlp/sup-simcse-roberta-large',
+    'gpt2_large': 'microsoft/DialoGPT-large',
+    'gpt2_medium': 'microsoft/DialoGPT-medium',
+    'llama_3_1B': 'meta-llama/Llama-3.2-1B',
+    'llama_3_3B': 'meta-llama/Llama-3.2-3B'
+}
 
-logger = logging.getLogger('mylogger')
-logger.setLevel(logging.DEBUG)
-# f_handler = logging.FileHandler('models_arr_feb/decoder_beam.log')
-f_handler = logging.FileHandler('/home/scur2874/IR2-GEIA/models/temp.log')
-f_handler.setLevel(logging.INFO)
-f_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s -  %(message)s"))
-logger.addHandler(f_handler)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def vectorize(sent_list, tokenizer):
     turn_ending = tokenizer.encode(tokenizer.eos_token)
@@ -53,32 +55,28 @@ def vectorize(sent_list, tokenizer):
     return input_labels
 
 
-
-
-
 def report_score(y_true,y_pred):
     # micro result should be reported
     precision = metrics.precision_score(y_true, y_pred, average='micro')
     recall = metrics.recall_score(y_true, y_pred, average='micro')
     f1 = metrics.f1_score(y_true, y_pred, average='micro')
-    logger.info(f"micro precision_score on token level: {str(precision)}")
-    logger.info(f"micro recall_score on token level: {str(recall)}")
-    logger.info(f"micro f1_score on token level: {str(f1)}")
-
+    print(f"micro precision_score on token level: {str(precision)}")
+    print(f"micro recall_score on token level: {str(recall)}")
+    print(f"micro f1_score on token level: {str(f1)}")
 
 
 def embed_simcse(y_true,y_pred):
-    model = SimCSE("princeton-nlp/sup-simcse-roberta-large",device='cuda')
+    model = SimCSE("princeton-nlp/sup-simcse-roberta-large",device=device)
     similarities = model.similarity(y_true, y_pred) # numpy array of N*N
     pair_scores = similarities.diagonal()
     for i,score in enumerate(pair_scores):
         assert pair_scores[i] == similarities[i][i]
     avg_score = np.mean(pair_scores)
-    logger.info(f'Evaluation on simcse-roberta with similarity score {avg_score}')
+    print(f'Evaluation on simcse-roberta with similarity score {avg_score}')
 
 
 def embed_sbert(y_true,y_pred):
-    model = SentenceTransformer('all-roberta-large-v1',device='cuda')       # has dim 768
+    model = SentenceTransformer('all-roberta-large-v1',device=device)       # has dim 768
     embeddings_true = model.encode(y_true,convert_to_tensor = True)
     embeddings_pred = model.encode(y_pred,convert_to_tensor = True)
     cosine_scores = util.cos_sim(embeddings_true, embeddings_pred)
@@ -86,9 +84,7 @@ def embed_sbert(y_true,y_pred):
     for i,score in enumerate(pair_scores):
         assert pair_scores[i] == cosine_scores[i][i]
     avg_score = torch.mean(pair_scores)
-    logger.info(f'Evaluation on Sentence-bert with similarity score {avg_score}')
-
-
+    print(f'Evaluation on Sentence-bert with similarity score {avg_score}')
     return avg_score
 
 
@@ -105,9 +101,6 @@ def main(log_path):
     report_embedding_similarity(y_true,y_pred)
 
 
-'''
-26/02 newly appended functions
-'''
 # remove punctuation from list of sentences 
 def punctuation_remove(sent_list):
     removed_list = []
@@ -192,47 +185,38 @@ def metric_token(log_path, model_name):
     y_true_removed_s = space_remove(y_true)       
     y_pred_removed_s = space_remove(y_pred)  
     precision,recall,f1 = word_level_metrics(y_true_removed_s,y_pred_removed_s)
-    logger.info(f'word level precision: {str(precision)}')
-    logger.info(f'word level recall: {str(recall)}')
-    logger.info(f'word level f1: {str(f1)}')
+    print(f'word level precision: {str(precision)}')
+    print(f'word level recall: {str(recall)}')
+    print(f'word level f1: {str(f1)}')
     
     precision,recall,f1 = word_level_metrics(y_true_removed_p,y_pred_removed_p)
-    logger.info(f'word level precision without punctuation: {str(precision)}')
-    logger.info(f'word level recall without punctuation: {str(recall)}')
-    logger.info(f'word level f1 without punctuation: {str(f1)}')
+    print(f'word level precision without punctuation: {str(precision)}')
+    print(f'word level recall without punctuation: {str(recall)}')
+    print(f'word level f1 without punctuation: {str(f1)}')
 
 
 if __name__ == '__main__':
-    '''
-    ### PC with sampling and randomly initialized GPT-2
-    sbert_roberta_large_pc_path  =  'models_random/attacker_gpt2_personachat_sent_roberta.log'
-    simcse_roberta_large_pc_path  = 'models_random/attacker_gpt2_personachat_simcse_roberta.log'
-    simcse_bert_large_pc_path = 'models_random/attacker_gpt2_personachat_simcse_bert.log' 
-    sentence_T5_large_pc_path = 'models_random/attacker_gpt2_personachat_sent_t5.log' 
-    mpnet_pc_path = 'models_random/attacker_gpt2_personachat_mpnet.log'
-    logger.info(f'====={sbert_roberta_large_pc_path}=====')
-    metric_token(sbert_roberta_large_pc_path)
-    logger.info(f'====={simcse_roberta_large_pc_path}=====')
-    metric_token(simcse_roberta_large_pc_path)
-    logger.info(f'====={simcse_bert_large_pc_path}=====')
-    metric_token(simcse_bert_large_pc_path)    
-    logger.info(f'====={sentence_T5_large_pc_path}=====')
-    metric_token(sentence_T5_large_pc_path)
-    logger.info(f'====={mpnet_pc_path}=====')
-    metric_token(mpnet_pc_path)
-    '''
+    parser = argparse.ArgumentParser(description='Evaluate generation')
+    parser.add_argument('--attack_model', type=str, default='gpt2_medium', help='Name of the attacker model')
+    parser.add_argument('--embed_model', type=str, default='sent_t5_large', help='Name of embedding model')
+    parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+    parser.add_argument('--dataset', type=str, default='personachat', help='Name of dataset: PersonaChat or QNLI')
+    parser.add_argument('--beam', type=bool, default=True, help='Toggle beam decoding method (sampling/beam)')
 
-    abcd_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_abcd_simcse_bert_beam.log'
-    mnli_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_mnli_simcse_bert_beam.log'
-    woz_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_multi_woz_simcse_bert_beam.log'
-    sst2_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_sst2_simcse_bert_beam.log'
-    wmt_path = '/home/hlibt/embed_rev/models_arr_feb/attacker_gpt2_wmt16_simcse_bert_beam.log'
+    args = parser.parse_args()
 
-    path_list = [abcd_path,mnli_path,woz_path,sst2_path,wmt_path]
+    config = {
+        'attack_model': args.attack_model,
+        'embed_model': args.embed_model,
+        'num_epochs': args.num_epochs,
+        'batch_size': args.batch_size,
+        'path': f'logs/{args.dataset}/{args.attack_model}/output_{args.embed_model}{"_beam" if args.beam else ""}.log',
+        'hf_path': f'oliverneut/{args.dataset}-{args.attack_model}-{args.embed_model}-attacker'
+    }
 
-    # path_list = ["models/attacker_gpt2_large_personachat_sent_t5_base_beam.log", "models/attacker_gpt2_medium_personachat_sent_t5_base_beam.log"]
-    path_list = ["models/attacker_gpt2_large_personachat_sent_t5_base_beam.log"]
-    # path_list = ["models/attacker_gpt2_medium_personachat_sent_t5_base_beam.log"]
+    path_list = [config['path']]
+
     for p in path_list:
-        logger.info(f'====={p}=====')
-        metric_token(p, "gpt2-large")
+        print(f'====={p}=====')
+        metric_token(p, model_cards[config['attack_model']])

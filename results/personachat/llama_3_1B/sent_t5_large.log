@@ -1,0 +1,10 @@
+2024-11-28 09:37:15,394 - INFO -  =====models/personachat/output_llama_3_sent_t5_large_beam.log=====
+2024-11-28 09:44:23,422 - INFO -  micro precision_score on token level: 0.7028851755661184
+2024-11-28 09:44:23,423 - INFO -  micro recall_score on token level: 0.6594301359786684
+2024-11-28 09:44:23,423 - INFO -  micro f1_score on token level: 0.680464592848728
+2024-11-28 09:44:27,055 - INFO -  word level precision: 0.7709336257690378
+2024-11-28 09:44:27,055 - INFO -  word level recall: 0.7296500899233163
+2024-11-28 09:44:27,055 - INFO -  word level f1: 0.7497239687260626
+2024-11-28 09:44:29,069 - INFO -  word level precision without punctuation: 0.7547301377347098
+2024-11-28 09:44:29,069 - INFO -  word level recall without punctuation: 0.7090042955151564
+2024-11-28 09:44:29,069 - INFO -  word level f1 without punctuation: 0.7311529980483962

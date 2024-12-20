@@ -1,0 +1,10 @@
+2024-11-28 09:35:46,262 - INFO -  =====models/personachat/output_llama_3_simcse_roberta_beam.log=====
+2024-11-28 09:42:55,501 - INFO -  micro precision_score on token level: 0.6739762552668539
+2024-11-28 09:42:55,502 - INFO -  micro recall_score on token level: 0.6275195897142507
+2024-11-28 09:42:55,502 - INFO -  micro f1_score on token level: 0.6499187912326273
+2024-11-28 09:42:59,162 - INFO -  word level precision: 0.7449797315444625
+2024-11-28 09:42:59,162 - INFO -  word level recall: 0.6972249723200216
+2024-11-28 09:42:59,162 - INFO -  word level f1: 0.720311716240071
+2024-11-28 09:43:01,165 - INFO -  word level precision without punctuation: 0.7261275045537341
+2024-11-28 09:43:01,165 - INFO -  word level recall without punctuation: 0.6737919287745228
+2024-11-28 09:43:01,165 - INFO -  word level f1 without punctuation: 0.6989814416195319

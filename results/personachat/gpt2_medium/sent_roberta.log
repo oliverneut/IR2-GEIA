@@ -1,0 +1,10 @@
+2024-11-21 22:18:49,484 - INFO -  =====models/personachat/output_gpt2_medium_sent_roberta_beam.log=====
+2024-11-21 22:25:57,308 - INFO -  micro precision_score on token level: 0.6066848605913964
+2024-11-21 22:25:57,310 - INFO -  micro recall_score on token level: 0.5507442558973469
+2024-11-21 22:25:57,310 - INFO -  micro f1_score on token level: 0.5773627038590987
+2024-11-21 22:26:00,943 - INFO -  word level precision: 0.6580702478027731
+2024-11-21 22:26:00,943 - INFO -  word level recall: 0.5975536171434263
+2024-11-21 22:26:00,943 - INFO -  word level f1: 0.6263535886614691
+2024-11-21 22:26:02,940 - INFO -  word level precision without punctuation: 0.6340401391017328
+2024-11-21 22:26:02,940 - INFO -  word level recall without punctuation: 0.5693423722372645
+2024-11-21 22:26:02,941 - INFO -  word level f1 without punctuation: 0.5999520742380718

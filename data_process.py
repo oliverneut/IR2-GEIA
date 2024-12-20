@@ -1,11 +1,10 @@
 from simcse_persona import get_persona_dict
 from datasets import load_dataset
 from pprint import pprint
-import config
 import json
 import sys
 
-abcd_path = config.abcd_path
+abcd_path = 'data/abcd/abcd_v1.1.json'
 
 '''
 list of supported datasets:
@@ -13,9 +12,7 @@ list of supported datasets:
 '''
 
 
-def get_sent_list(config):
-    dataset = config['dataset']
-    data_type = config['data_type']
+def get_sent_list(dataset, data_type):
     if dataset == 'personachat':
         sent_list = get_personachat_data(data_type)
         return sent_list
@@ -85,10 +82,9 @@ def get_wmt16_data(data_type):
     dataset = load_dataset('wmt16', 'cs-en', cache_dir="data/", split=data_type)
     sentence_list = []
     for i, d in enumerate(dataset):
-
-        #pprint(d)
         sentence_list.append(d['translation']['en'])
     return sentence_list
+
 
 ### multi_woz
 ## translation dataset
@@ -101,24 +97,18 @@ def get_multi_woz_data(data_type):
         s = d['turns']['utterance']
         sentence_list.extend(s)
     return sentence_list
+
+
 def get_abcd_data(data_type,path = abcd_path):
-    
-    #abcd_path = config.abcd_path
     with open(path, 'r') as f:
         dataset = json.load(f)
     dataset = dataset[data_type]
-    #pprint(data[0])
     sentence_list = []
     for i, d in enumerate(dataset):
         s = d['original']
         for sent in s:
             if(sent[0] != 'action'):
                 sentence_list.append(sent[1])
-        # print('==='*50)
-        # pprint(s)
-        # pprint(sentence_list)
-        # if i>=2:
-        #     sys.exit(-1)
     return sentence_list
 
 

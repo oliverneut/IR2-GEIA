@@ -1,102 +1,69 @@
 # GEIA
-Code for Findings-ACL 2023 paper: Sentence Embedding Leaks More Information than You Expect: Generative Embedding Inversion Attack to Recover the Whole Sentence
+Code for reproducing Findings-ACL 2023 paper: [Sentence Embedding Leaks More Information than You Expect: Generative Embedding Inversion Attack to Recover the Whole Sentence](https://aclanthology.org/2023.findings-acl.881/)
+
 
 ### Package Dependencies
-* numpy
-* pytorch 1.10.2
-* sentence_transformers 2.2.0
-* transformers 4.xx.x
-* simcse 0.4
-* datasets
+To install the environment needed for training the model and running the evaluations:
+```
+conda env create -f env.yml
+```
+
+after it has finished installing the packages, the environment can be activated using:
+
+```
+conda activate GEIA
+```
 
 ### Data Preparation
-We upload PC data under the ```data/``` folder.
-The ABCD dataset we experimented can be found in https://drive.google.com/file/d/1oIo8P0Y8X9DTeEfOA1WUKq8Uix9a_Pte/view?usp=sharing.
+We upload personachat data under the ```data/``` folder.
+
 For other datasets, we use ```datasets``` package to download and store them, so you can run our code directly.
 
-### Baseline Attackers
-**You need to set up arguments properly before running codes**:
-```python projection.py```
+### GEIA
+**You need to set up arguments properly before running scripts**:
 
-* --model_dir: Attacker model path from Huggingface (like 'gpt2-large' and 'microsoft/DialoGPT-xxxx') or local model checkpoints.
-* --num_epochs: Training epoches.
-* --batch_size: Batch_size #.
-* --dataset: Name of the dataset including personachat, qnli, mnli, sst2, wmt16, multi_woz and abcd.
-* --data_type: Train or test.
-* --embed_model: The victim model you wish to attack. We currently support sentence-bert models and huggingface models, you may refer to our model_cards dictionary in ```projection.py``` for more information.
-* --model_type: NN or RNN
+```python attacker.py```
+
+* --attack_model: attacker model (decoder) name (default value is 'microsoft/DialoGPT-medium')
+* --embed_model: embedding model (sentence embedding) name (default value is 'sent_t5_large')
+* --num_epochs: number of training epochs (default value is 10)
+* --batch_size: batch_size (default value is 64)
+* --dataset: name of the dataset including personachat, qnli, mnli, sst2, wmt16, multi_woz and abcd (default value is 'personachat')
+* --data_type: train or test
+* --beam: toggles beam search decoding (default value is True)
+
+Refer to the model card in `attacker.py` to view the different model paths.
 
 By running:
 ```python projection.py```
 You will train your own baseline model and evaluate it. If you want to just train or eval a certain model, check the last four lines of ```projection.py``` and disable the corresponding codes.
 
-### GIEA
-
-#### GPT-2 Attacker
-**You need to set up arguments properly before running codes**:
-```python attacker.py```
-
-* --model_dir: Attacker model path from Huggingface (like 'gpt2-large' and 'microsoft/DialoGPT-xxxx') or local model checkpoints.
-* --num_epochs: Training epoches.
-* --batch_size: Batch_size #.
-* --dataset: Name of the dataset including personachat, qnli, mnli, sst2, wmt16, multi_woz and abcd.
-* --data_type: train or dev or test.
-* --embed_model: The victim model you wish to attack. We currently support sentence-bert models and huggingface models, you may refer to our model_cards dictionary in ```attacker.py``` for more information.
-* --decode: Decoding algorithm. We currently implement beam and sampling based decoding.
-
-You should train the attacker on training data at first, then test your attacker on the test data to obtain test logs. Then you can evaluate attack performance on test logs by changing model_dir to your trained attcker and data_type to test.
-
-If you want to train a randomly initialized GPT-2 attacker, after setting the arguments, run:
-```python attacker_random_gpt2.py```
-
-#### Other Attackers
-Due to the fact that different decoders have different implementaions, we use separate py files for each model (the decoding implementations also differ). 
-
-If you want to try out opt as the attacker model, run:
-```python attacker_opt.py```
-
-If you want to try out t5 as the attacker model, run:
-```python attacker_t5.py```
 
 ### Evaluation
 **You need to make sure the test reuslt paths is set inside the 'eval_xxx.py' files.**
 
 To obtain classification performance, run:
 ```python eval_classification.py```
+* --attack_model: attacker model (decoder) name (default value is 'microsoft/DialoGPT-medium')
+* --embed_model: embedding model (sentence embedding) name (default value is 'sent_t5_large')
+* --dataset: name of the dataset including personachat, qnli, mnli, sst2, wmt16, multi_woz and abcd (default value is 'personachat')
+* --beam: toggles beam search decoding (default value is True)
 
 To obtain generation performance, run:
 ```python eval_generation.py```
 
+* --attack_model: attacker model (decoder) name (default value is 'microsoft/DialoGPT-medium')
+* --embed_model: embedding model (sentence embedding) name (default value is 'sent_t5_large')
+* --num_epochs: number of training epochs (default value is 10)
+* --batch_size: batch_size (default value is 64)
+* --dataset: name of the dataset including personachat, qnli, mnli, sst2, wmt16, multi_woz and abcd (default value is 'personachat')
+* --beam: toggles beam search decoding (default value is True)
+
+
 To calculate perplexity, you need to set the LM to caluate PPL, run:
-```python eval_ppl.py```
+```python eval_ner.py```
 
-### Citation
-
-Please kindly cite the following paper if you found our method and resources helpful!
-
-```
-@inproceedings{li-etal-2023-sentence,
-    title = "Sentence Embedding Leaks More Information than You Expect: Generative Embedding Inversion Attack to Recover the Whole Sentence",
-    author = "Li, Haoran  and
-      Xu, Mingshi  and
-      Song, Yangqiu",
-    booktitle = "Findings of the Association for Computational Linguistics: ACL 2023",
-    month = jul,
-    year = "2023",
-    address = "Toronto, Canada",
-    publisher = "Association for Computational Linguistics",
-    url = "https://aclanthology.org/2023.findings-acl.881",
-    doi = "10.18653/v1/2023.findings-acl.881",
-    pages = "14022--14040",
-}
-```
-
-### Miscellaneous
-
-Please send any questions about the code and/or the algorithm to hlibt@connect.ust.hk
-
-
-
-
-
-
+* --attack_model: attacker model (decoder) name (default value is 'microsoft/DialoGPT-medium')
+* --embed_model: embedding model (sentence embedding) name (default value is 'sent_t5_large')
+* --dataset: name of the dataset including personachat, qnli, mnli, sst2, wmt16, multi_woz and abcd (default value is 'personachat')
+* --beam: toggles beam search decoding (default value is True)
