@@ -2,3 +2,7 @@
 __pycache__
 output
 slurm
+models/
+data/
+*.sh
+*.job
